@@ -1,4 +1,5 @@
 import os
+import time
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from main_UI import Ui_MainWindow as Ui_Main
@@ -38,7 +39,8 @@ class InputWindow(QtWidgets.QMainWindow, Ui_Input):
         self.hide()
 
 
-# === Sub-windows ===
+# ======================== Sub-windows ==============================
+# === Normal mode logic ===
 class NormalModeWindow(QtWidgets.QMainWindow, Ui_Normal):
     # Persistent storage for last applied values
     saved_mode = None
@@ -248,7 +250,7 @@ class NormalModeWindow(QtWidgets.QMainWindow, Ui_Normal):
             self.parent_window.show()
         event.accept()
 
-
+# === Advacne mode logic ===
 class AdvanceModeWindow(QtWidgets.QMainWindow, Ui_Advance):
     # Persistent storage for applied file
     saved_file_path = None
@@ -367,6 +369,101 @@ class AdvanceModeWindow(QtWidgets.QMainWindow, Ui_Advance):
             self.parent_window.show()
         event.accept()
 
+# === Run button logic ===
+class RunSetupWindow(QtWidgets.QDialog):
+    def __init__(self, parent_window=None):
+        super().__init__(parent_window)
+        self.setWindowTitle("Run Configuration")
+        self.setFixedSize(300, 150)
+        self.parent_window = parent_window
+
+        # Remove the "?" button from title bar
+        self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(QtWidgets.QLabel("Enter run time (seconds):"))
+        self.time_input = QtWidgets.QLineEdit()
+        self.time_input.setPlaceholderText("e.g., 10")
+        layout.addWidget(self.time_input)
+
+        self.ok_btn = QtWidgets.QPushButton("OK")
+        layout.addWidget(self.ok_btn)
+        self.ok_btn.clicked.connect(self.confirm_time)
+
+    def confirm_time(self):
+        """Validate input and open progress window"""
+        try:
+            run_time = int(self.time_input.text())
+            if run_time <= 0:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid Input", "Please enter a valid positive integer for time."
+            )
+            return
+
+        # Close this window and open the progress window
+        self.close()
+        self.progress_window = RunProgressWindow(run_time)
+        self.progress_window.show()
+
+class RunWorker(QtCore.QThread):
+    finished_signal = QtCore.pyqtSignal()
+
+    def __init__(self, run_time, parent=None):
+        super().__init__(parent)
+        self.run_time = run_time # store the time value
+        print(f"{self.run_time} seconds")
+
+    def run(self):
+        # Simulate a long-running process (not blocking GUI)
+        print("[Worker] Started heavy task")
+        time.sleep(20)  # or run your algorithm here
+        print("[Worker] Task done")
+        self.finished_signal.emit()
+
+class RunProgressWindow(QtWidgets.QDialog):
+    def __init__(self, run_time):
+        super().__init__()
+        self.setWindowTitle("Running System")
+        self.setFixedSize(400, 120)
+        self.run_time = run_time
+        self.elapsed = 0
+
+        layout = QtWidgets.QVBoxLayout(self)
+        self.progress_label = QtWidgets.QLabel("Running system...")
+        self.time_label = QtWidgets.QLabel("Elapsed time: 0 s")
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setMaximum(run_time)
+        layout.addWidget(self.progress_label)
+        layout.addWidget(self.time_label)
+        layout.addWidget(self.progress_bar)
+
+        # === Start worker in background ===
+        self.worker = RunWorker(run_time)
+        self.worker.finished_signal.connect(self.on_worker_finished)
+        self.worker.start()  # start heavy process immediately
+
+        # === Timer only for visual progress ===
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.update_progress_bar)
+        self.timer.start(1000)  # update every second
+
+    def update_progress_bar(self):
+        """Animate progress independently of worker."""
+        self.elapsed += 1
+        self.progress_bar.setValue(self.elapsed)
+        self.time_label.setText(f"Elapsed time: {self.elapsed} s")
+
+        if self.elapsed >= self.run_time:
+            self.timer.stop()
+            self.progress_label.setText("Run complete!")
+            QtCore.QTimer.singleShot(1000, self.close)
+
+    def on_worker_finished(self):
+        print("Worker finished its real computation.")
+
+# === User Manual logic ===
 class UserGuideWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -440,7 +537,9 @@ class MainApp(QtWidgets.QMainWindow, Ui_Main):
         print("Double-click Output → open Output window here")
 
     def open_run_window(self):
-        print("Double-click RUN → open RUN window here")
+        """Open the run configuration dialog."""
+        self.run_setup_window = RunSetupWindow(self)
+        self.run_setup_window.show()
 
     def open_user_guide_window(self):
         """Open the User Guide window."""
