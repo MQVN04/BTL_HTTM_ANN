@@ -1,4 +1,5 @@
-from PyQt5 import QtWidgets
+import os
+from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from main_UI import Ui_MainWindow as Ui_Main
 from input_window import Ui_MainWindow as Ui_Input
@@ -261,6 +262,23 @@ class AdvanceModeWindow(QtWidgets.QMainWindow, Ui_Advance):
             self.parent_window.show()
         event.accept()
 
+class UserGuideWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("User Guide")
+        self.resize(900, 600)
+
+        # QTextBrowser can display HTML content
+        self.browser = QtWidgets.QTextBrowser()
+        guide_path = os.path.abspath("user_guide.html")
+
+        if os.path.exists(guide_path):
+            self.browser.setSource(QtCore.QUrl.fromLocalFile(guide_path))
+        else:
+            self.browser.setText("<h2 style='color:red;'>User guide file not found.</h2>")
+
+        # Layout
+        self.setCentralWidget(self.browser)
 
 # === Main window logic ===
 class MainApp(QtWidgets.QMainWindow, Ui_Main):
@@ -320,4 +338,6 @@ class MainApp(QtWidgets.QMainWindow, Ui_Main):
         print("Double-click RUN → open RUN window here")
 
     def open_user_guide_window(self):
-        print("Double-click User Guide → open User Guide window here")
+        """Open the User Guide window."""
+        self.user_guide_window = UserGuideWindow()
+        self.user_guide_window.show()
