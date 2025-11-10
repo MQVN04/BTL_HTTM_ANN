@@ -250,12 +250,117 @@ class NormalModeWindow(QtWidgets.QMainWindow, Ui_Normal):
 
 
 class AdvanceModeWindow(QtWidgets.QMainWindow, Ui_Advance):
+    # Persistent storage for applied file
+    saved_file_path = None
+
     def __init__(self, parent_window=None):
         super().__init__()
         self.setupUi(self)
         self.setWindowTitle("Advance Mode Window")
         self.parent_window = parent_window
 
+        # === Connect Buttons ===
+        self.Import_btn.clicked.connect(self.import_file)
+        self.Apply_advancemode_btn.clicked.connect(self.apply_imported_file)
+        self.Clear_code_btn.clicked.connect(self.clear_imported_file)
+        self.OK_advancemode_btn.clicked.connect(self.on_ok_clicked)
+
+        # === Restore previous file if available ===
+        if AdvanceModeWindow.saved_file_path:
+            self.imported_file = AdvanceModeWindow.saved_file_path
+            self.Status_import_label.setText(
+                f"Applied File: {os.path.basename(self.imported_file)}"
+            )
+            self.Status_import_label.setStyleSheet("color: green; font-weight: bold;")
+            self.Apply_advancemode_btn.setEnabled(False)  # already applied
+        else:
+            self.imported_file = None
+            self.Status_import_label.setText("No file imported")
+            self.Status_import_label.setStyleSheet("color: gray; font-style: italic;")
+            self.Apply_advancemode_btn.setEnabled(False)
+
+    # === Import file logic ===
+    def import_file(self):
+        """Open a file dialog to select a Python or C/C++ file."""
+        while True:
+            file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self,
+                "Import Source Code",
+                "",
+                "Source Files (*.py *.c *.cpp);;All Files (*)"
+            )
+
+            if not file_path:
+                # User cancelled
+                self.Status_import_label.setText("Import cancelled")
+                self.Status_import_label.setStyleSheet("color: gray; font-style: italic;")
+                return
+
+            # Validate extension
+            if file_path.endswith((".py", ".c", ".cpp")):
+                self.imported_file = file_path
+                filename = os.path.basename(file_path)
+                self.Status_import_label.setText(f"File imported: {filename}")
+                self.Status_import_label.setStyleSheet("color: green; font-weight: bold;")
+                print(f"[File Imported] {file_path}")
+
+                # Enable Apply only if new file or changed file
+                if file_path != AdvanceModeWindow.saved_file_path:
+                    self.Apply_advancemode_btn.setEnabled(True)
+                else:
+                    self.Apply_advancemode_btn.setEnabled(False)
+                break
+            else:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "Invalid File",
+                    "Invalid file type! Please import a Python (.py), C (.c), or C++ (.cpp) file."
+                )
+                # Reopen dialog automatically (loop continues)
+
+    # === Apply button logic ===
+    def apply_imported_file(self):
+        """Confirm the imported file and persist its path."""
+        if not self.imported_file:    ##warning if there is no file imported but applied button is pressed 
+            QtWidgets.QMessageBox.warning(
+                self,
+                "No File",
+                "No file has been imported yet. Please import a file first."
+            )
+            return
+
+        # Save persistently
+        AdvanceModeWindow.saved_file_path = self.imported_file
+        filename = os.path.basename(self.imported_file)
+        self.Status_import_label.setText(f"Input values are set ({filename})")
+        self.Status_import_label.setStyleSheet("color: blue; font-weight: bold;")
+        print(f"[Applied File] {self.imported_file}")
+
+        # Disable Apply until user imports again
+        self.Apply_advancemode_btn.setEnabled(False)
+
+    # === Clear all ===
+    def clear_imported_file(self):
+        """Remove imported file and reset state."""
+        self.imported_file = None
+        AdvanceModeWindow.saved_file_path = None
+
+        self.Status_import_label.setText("All values cleared")
+        self.Status_import_label.setStyleSheet("color: red; font-weight: bold;")
+        self.Apply_advancemode_btn.setEnabled(False)
+
+        print("[Advance Mode] File cleared successfully")
+
+    # === OK button ===
+    def on_ok_clicked(self):
+        """Close window safely after ensuring state is applied."""
+        if self.imported_file and self.Apply_advancemode_btn.isEnabled():
+            # Auto-apply if imported but not applied yet
+            self.apply_imported_file()
+
+        self.close()
+
+    # === Close event ===
     def closeEvent(self, event):
         """When this window closes, reopen the InputWindow."""
         if self.parent_window:
